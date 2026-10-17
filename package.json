@@ -1,0 +1,42 @@
+{
+  "name": "envcheck",
+  "version": "0.1.0",
+  "description": "Check .env files for missing keys.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Almeida96/envcheck.git"
+  },
+  "homepage": "https://github.com/Almeida96/envcheck#readme",
+  "bugs": {
+    "url": "https://github.com/Almeida96/envcheck/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "envcheck": "./bin/envcheck.js"
+  },
+  "exports": "./src/index.js",
+  "files": [
+    "bin/",
+    "src/",
+    "examples/",
+    "README.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "demo": "node bin/envcheck.js --example examples/.env.example --env examples/complete.env.example"
+  },
+  "keywords": [
+    "dotenv",
+    "environment",
+    "validation",
+    "cli",
+    "ci"
+  ]
+}

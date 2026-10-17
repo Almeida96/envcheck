@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - name: Run tests
+        run: node --test
+      - name: Run passing example
+        run: node bin/envcheck.js --example examples/.env.example --env examples/complete.env.example --strict
+
+  package:
+    name: Verify local distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Pack and check contents
+        run: |
+          npm pack --json > pack-report.json
+          node scripts/check-package.js pack-report.json
+      - name: Smoke test the packed command
+        run: |
+          mkdir packed
+          tar -xzf "$(node -p "require('./pack-report.json')[0].filename")" -C packed
+          node packed/package/bin/envcheck.js --version
+          node packed/package/bin/envcheck.js --example examples/.env.example --env examples/complete.env.example --strict
