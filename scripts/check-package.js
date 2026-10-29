@@ -13,9 +13,11 @@ const expected = [
   'src/cli.js',
   'src/index.js',
   'src/parser.js',
+  'src/schema.js',
   'examples/.env.example',
   'examples/complete.env.example',
   'examples/missing.env.example',
+  'examples/schema.json',
 ];
 
 assert.deepEqual([...paths].sort(), expected.sort(), 'Unexpected package contents.');

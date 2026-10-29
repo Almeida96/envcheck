@@ -5,8 +5,15 @@
  * @returns {{ keys: string[], issues: Array<{ code: string, line: number, key?: string, firstLine?: number }> }}
  */
 export function parseEnvKeys(source) {
+  const { keys, issues } = parseEnv(source);
+  return { keys, issues };
+}
+
+/** Parse literal values without expanding variables or evaluating shell syntax. */
+export function parseEnv(source) {
   const lines = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n');
   const seen = new Map();
+  const entries = new Map();
   const issues = [];
   let multiline = null;
 
@@ -16,16 +23,18 @@ export function parseEnvKeys(source) {
 
     if (multiline) {
       const closing = closingQuote(line, multiline.quote);
+      multiline.value += '\n' + (closing < 0 ? line : line.slice(0, closing));
       if (closing !== -1) {
         if (!validTail(line.slice(closing + 1))) {
           issues.push({ code: 'invalid-quoted-value', line: lineNumber });
         }
+        entries.set(multiline.key, { value: multiline.value, line: multiline.line });
         multiline = null;
       }
       continue;
     }
 
-    const trimmed = line.trim();
+    const trimmed = line.trimStart();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
     const assignment = /^(?:export[\t ]+)?([A-Za-z_][A-Za-z0-9_]*)[\t ]*=[\t ]*(.*)$/.exec(trimmed);
@@ -45,10 +54,14 @@ export function parseEnvKeys(source) {
     if (quote === '"' || quote === "'" || quote === '`') {
       const closing = closingQuote(value, quote, 1);
       if (closing === -1) {
-        multiline = { quote, line: lineNumber };
+        multiline = { quote, key, value: value.slice(1), line: lineNumber };
       } else if (!validTail(value.slice(closing + 1))) {
         issues.push({ code: 'invalid-quoted-value', line: lineNumber });
+      } else {
+        entries.set(key, { value: value.slice(1, closing), line: lineNumber });
       }
+    } else {
+      entries.set(key, { value: value.split('#')[0].trim(), line: lineNumber });
     }
   }
 
@@ -56,7 +69,7 @@ export function parseEnvKeys(source) {
     issues.push({ code: 'unclosed-quote', line: multiline.line });
   }
 
-  return { keys: [...seen.keys()].sort(), issues };
+  return { keys: [...seen.keys()].sort(), issues, entries };
 }
 
 function validTail(tail) {

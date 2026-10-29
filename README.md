@@ -41,6 +41,7 @@ This example exits with code `1`. Replace `missing.env.example` with `complete.e
 | `--example <path>` | `.env.example` | File listing the required keys. |
 | `--env <path>` | `.env` | File to check. |
 | `--strict` | Off | Fail on extra keys too. |
+| `--schema <path>` | None | Validate values against explicit rules. |
 | `--json` | Off | Output JSON, including errors. |
 | `-h`, `--help` | | Show help. |
 | `-v`, `--version` | | Show version. |
@@ -49,13 +50,37 @@ This example exits with code `1`. Replace `missing.env.example` with `complete.e
 
 Every key in the reference file is required. Names are case-sensitive: `TOKEN` and `token` are different keys. Extra keys are allowed unless `--strict` is set.
 
-An empty assignment such as `API_TOKEN=` counts as present. Values are neither printed nor validated. The check reads the two files without modifying them or using variables from the shell.
+An empty assignment such as `API_TOKEN=` counts as present. Values are validated only when `--schema` is supplied, and are never printed. The check reads the two files without modifying them or using variables from the shell.
 
 Files must use UTF-8; BOM and LF, CRLF or CR line endings are accepted. Keys must match `[A-Za-z_][A-Za-z0-9_]*`. Comments, the `export` prefix and spaces around `=` are allowed.
 
 Values can be unquoted or enclosed in single quotes, double quotes or backticks. Quoted values can span lines. A quote preceded by an odd number of backslashes is treated as part of the value. Only whitespace or a `#` comment may follow a closing quote.
 
 Duplicate keys, malformed assignments, unclosed quotes and an empty reference file cause an error. Variable interpolation and shell commands are not evaluated.
+
+## Validate values
+
+A key can exist and still break an application: an empty token, an invalid URL, or a port outside its range. Add a JSON rules file and pass `--schema env.schema.json`:
+
+```json
+{
+  "PORT": { "type": "integer", "min": 1, "max": 65535 },
+  "API_URL": { "type": "url" },
+  "API_TOKEN": { "nonEmpty": true },
+  "NODE_ENV": { "enum": ["development", "test", "production"] },
+  "TLS": { "type": "boolean" }
+}
+```
+
+```sh
+node bin/envcheck.js --example .env.example --env .env --schema env.schema.json --json
+```
+
+Rules apply to keys in the reference file; unknown keys and misspelled rule options are errors. Supported types are `string`, `integer` (safe integers only), `number` (finite decimal notation), `boolean` (`true` or `false`), and `url` (absolute HTTP or HTTPS). `min` and `max` are inclusive numeric bounds. `enum` compares literal strings. `nonEmpty` rejects whitespace-only values. Empty values fail numeric, boolean and URL types even without `nonEmpty`.
+
+Quotes are removed and unquoted comments are stripped before validation. Escape sequences and variable references remain literal: this is not a shell evaluator. Missing keys remain listed under `missing`; invalid values appear under `valueIssues` with a key, line, code and message. Value failures exit with `1`; invalid rule files exit with `2`. Diagnostics never include the actual value or enum contents.
+
+The library also exports `parseEnv`, `validateSchema` and `validateValues`. Unlike `parseEnvKeys`, `parseEnv` returns an `entries` Map containing values and their source lines. Do not log that Map when processing secrets.
 
 ## CI and JSON
 
@@ -66,7 +91,7 @@ node bin/envcheck.js --example .env.example --env .env.local --strict --json
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Check passed. |
-| `1` | Missing keys, or extra keys in strict mode. |
+| `1` | Missing keys, invalid values, or extra keys in strict mode. |
 | `2` | Invalid arguments, unreadable file or invalid file syntax. |
 
 JSON reports include `schemaVersion: 1`, `status`, `ok` and `exitCode`. Completed checks add `files`, `strict`, `counts`, `missing`, `extra` and `matched`. Key lists are sorted.

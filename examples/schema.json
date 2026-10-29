@@ -1,0 +1,6 @@
+{
+  "APP_NAME": { "nonEmpty": true },
+  "APP_PORT": { "type": "integer", "min": 1, "max": 65535 },
+  "API_URL": { "type": "url" },
+  "API_TOKEN": { "nonEmpty": true }
+}
