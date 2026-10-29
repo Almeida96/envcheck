@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { compareKeys, parseEnvKeys } from './index.js';
+import { compareKeys, parseEnv, validateSchema, validateValues } from './index.js';
 
 const HELP = `EnvCheck - check .env keys against an example file.
 
@@ -11,6 +11,7 @@ Options:
   --example <path>  Reference file (default: .env.example)
   --env <path>      File to check (default: .env)
   --strict         Fail if extra keys are found
+  --schema <path>   Validate values with a JSON schema file
   --json           Write results and errors as JSON to stdout
   -h, --help       Show help
   -v, --version    Show the version
@@ -22,10 +23,10 @@ Examples:
 
 Exit codes:
   0  Check passed
-  1  Missing keys, or extra keys in strict mode
+  1  Missing keys, invalid values, or extra keys in strict mode
   2  Invalid arguments, unreadable file, or syntax error
 
-Empty values count as present. Shell environment variables are not read.
+Empty values count as present. A schema can reject them. Shell variables are not read.
 `;
 
 const ISSUE_MESSAGES = {
@@ -69,6 +70,16 @@ export async function run(args, { stdout = process.stdout, stderr = process.stde
   if (errors.length > 0) return reportError(errors, options.json, stdout, stderr);
 
   const comparison = compareKeys(example.keys, actual.keys, { strict: options.strict });
+  let valueIssues = [];
+  if (options.schema) {
+    let schema;
+    try { schema = JSON.parse(await readFile(options.schema, 'utf8')); }
+    catch { return reportError([{ code: 'schema-error', path: options.schema, message: 'Could not read a valid JSON schema file.' }], options.json, stdout, stderr); }
+    try { validateSchema(schema, example.keys); }
+    catch (error) { return reportError([{ code: 'schema-error', path: options.schema, message: error.message }], options.json, stdout, stderr); }
+    valueIssues = validateValues(actual.entries, schema);
+    comparison.ok &&= valueIssues.length === 0;
+  }
   const exitCode = comparison.ok ? 0 : 1;
   const report = {
     schemaVersion: 1,
@@ -76,6 +87,7 @@ export async function run(args, { stdout = process.stdout, stderr = process.stde
     exitCode,
     files: { example: options.example, env: options.env },
     ...comparison,
+    ...(options.schema ? { valueIssues } : {}),
   };
 
   if (options.json) {
@@ -92,7 +104,7 @@ function parseArguments(args) {
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
     const normalized = flag === '-h' ? '--help' : flag === '-v' ? '--version' : flag;
-    if (!['--example', '--env', '--strict', '--json', '--help', '--version'].includes(normalized)) {
+    if (!['--example', '--env', '--schema', '--strict', '--json', '--help', '--version'].includes(normalized)) {
       return { error: { code: 'invalid-arguments', message: 'Unknown argument. See --help.' } };
     }
     if (seen.has(normalized)) {
@@ -100,7 +112,7 @@ function parseArguments(args) {
     }
     seen.add(normalized);
 
-    if (normalized === '--example' || normalized === '--env') {
+    if (['--example', '--env', '--schema'].includes(normalized)) {
       const path = args[index + 1];
       if (!path || path.startsWith('-')) {
         return { error: { code: 'invalid-arguments', message: `Option ${normalized} requires a file path.` } };
@@ -131,9 +143,10 @@ async function readEnvironment(path, role) {
     };
   }
 
-  const { keys, issues } = parseEnvKeys(source);
+  const { keys, issues, entries } = parseEnv(source);
   return {
     keys,
+    entries,
     errors: issues.map((issue) => ({ ...issue, role, path, message: ISSUE_MESSAGES[issue.code] })),
   };
 }
@@ -166,6 +179,9 @@ function formatReport(report) {
   }
   if (report.extra.length) {
     lines.push('', `Extra (${report.extra.length}; ${report.strict ? 'not allowed in strict mode' : 'allowed'}):`, ...report.extra.map((key) => `  + ${key}`));
+  }
+  if (report.valueIssues?.length) {
+    lines.push('', 'Invalid values:', ...report.valueIssues.map(issue => `  - ${issue.key}:${issue.line} [${issue.code}] ${issue.message}`));
   }
   lines.push('');
   return lines.join('\n');

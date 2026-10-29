@@ -1,4 +1,6 @@
 export { parseEnvKeys } from './parser.js';
+export { parseEnv } from './parser.js';
+export { validateSchema, validateValues } from './schema.js';
 
 /**
  * Compare case-sensitive key sets.
