@@ -1,5 +1,7 @@
 # EnvCheck
 
+[![CI](https://github.com/Almeida96/envcheck/actions/workflows/ci.yml/badge.svg)](https://github.com/Almeida96/envcheck/actions/workflows/ci.yml)
+
 Compares the variable names in `.env` with `.env.example` and lists missing or extra keys.
 
 Node.js 22+, no dependencies.
@@ -119,6 +121,12 @@ console.log(result.missing); // ['API_TOKEN']
 ```
 
 `parseEnvKeys` returns `{ keys, issues }`. If `issues` is not empty, fix the syntax errors before comparing: `keys` may be incomplete. `compareKeys` accepts iterables of key names.
+
+## Troubleshooting
+
+If CI reports every key as missing, check which file is passed to `--env`. The CLI reads that file, not environment variables inherited from the runner. An empty value counts as present unless a schema rule rejects it.
+
+Use exit code 2 to distinguish an unreadable or malformed input from an actual configuration mismatch (exit code 1). Fix syntax errors before relying on key comparisons. Keep real `.env` files out of commits; the checked-in examples use demonstration values.
 
 ## Development
 
