@@ -54,7 +54,7 @@ Every key in the reference file is required. Names are case-sensitive: `TOKEN` a
 
 An empty assignment such as `API_TOKEN=` counts as present. Values are validated only when `--schema` is supplied, and are never printed. The check reads the two files without modifying them or using variables from the shell.
 
-Files must use UTF-8; BOM and LF, CRLF or CR line endings are accepted. Keys must match `[A-Za-z_][A-Za-z0-9_]*`. Comments, the `export` prefix and spaces around `=` are allowed.
+Environment and schema files must use valid UTF-8 and be no larger than 1 MiB each. Invalid byte sequences are rejected instead of silently replacing characters. BOM and LF, CRLF or CR line endings are accepted. Keys must match `[A-Za-z_][A-Za-z0-9_]*`. Comments, the `export` prefix and spaces around `=` are allowed.
 
 Values can be unquoted or enclosed in single quotes, double quotes or backticks. Quoted values can span lines. A quote preceded by an odd number of backslashes is treated as part of the value. Only whitespace or a `#` comment may follow a closing quote.
 

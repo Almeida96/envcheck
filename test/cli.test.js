@@ -9,6 +9,27 @@ import { test } from 'node:test';
 const executable = fileURLToPath(new URL('../bin/envcheck.js', import.meta.url));
 const sentinel = 'SENTINEL_PRIVATE_VALUE_do_not_print_78129';
 
+test('rejects invalid UTF-8 and oversized environment files without printing values', async (t) => {
+  const cwd = await fixture(t);
+  await writeFile(join(cwd, '.env'), Buffer.concat([Buffer.from(`TOKEN=${sentinel}`), Buffer.from([0xff])]));
+  let result = invoke(cwd, ['--json']);
+  assert.equal(result.status, 2);
+  assert.match(JSON.parse(result.stdout).errors[0].message, /UTF-8/);
+  assert.equal((result.stdout + result.stderr).includes(sentinel), false);
+  await writeFile(join(cwd, '.env'), 'TOKEN=' + 'x'.repeat(1024 * 1024));
+  result = invoke(cwd, ['--json']);
+  assert.equal(result.status, 2);
+  assert.match(JSON.parse(result.stdout).errors[0].message, /1 MiB/);
+});
+
+test('rejects invalid UTF-8 schema data instead of silently replacing bytes', async (t) => {
+  const cwd = await fixture(t);
+  await writeFile(join(cwd, 'schema.json'), Buffer.concat([Buffer.from('{"TOKEN":{"enum":["'), Buffer.from([0xff]), Buffer.from('"]}}')]));
+  const result = invoke(cwd, ['--schema', 'schema.json', '--json']);
+  assert.equal(result.status, 2);
+  assert.equal(JSON.parse(result.stdout).errors[0].code, 'schema-error');
+});
+
 async function fixture(t, { example = `TOKEN=\nURL=\n`, env = `TOKEN=${sentinel}\nURL=https://example.invalid\n` } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'envcheck-test-'));
   t.after(async () => {

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 import { compareKeys, parseEnv, validateSchema, validateValues } from './index.js';
 
 const HELP = `EnvCheck - check .env keys against an example file.
@@ -73,7 +73,7 @@ export async function run(args, { stdout = process.stdout, stderr = process.stde
   let valueIssues = [];
   if (options.schema) {
     let schema;
-    try { schema = JSON.parse(await readFile(options.schema, 'utf8')); }
+    try { schema = JSON.parse(await readInput(options.schema)); }
     catch { return reportError([{ code: 'schema-error', path: options.schema, message: 'Could not read a valid JSON schema file.' }], options.json, stdout, stderr); }
     try { validateSchema(schema, example.keys); }
     catch (error) { return reportError([{ code: 'schema-error', path: options.schema, message: error.message }], options.json, stdout, stderr); }
@@ -129,13 +129,15 @@ function parseArguments(args) {
 async function readEnvironment(path, role) {
   let source;
   try {
-    source = await readFile(path, 'utf8');
+    source = await readInput(path);
   } catch (error) {
     const messages = {
       ENOENT: 'File not found.',
       EACCES: 'Permission denied.',
       EPERM: 'Permission denied.',
       EISDIR: 'Path is a directory, not a file.',
+      INPUT_LIMIT: 'File exceeds the 1 MiB input limit.',
+      ERR_ENCODING_INVALID_ENCODED_DATA: 'File is not valid UTF-8.',
     };
     return {
       keys: [],
@@ -149,6 +151,24 @@ async function readEnvironment(path, role) {
     entries,
     errors: issues.map((issue) => ({ ...issue, role, path, message: ISSUE_MESSAGES[issue.code] })),
   };
+}
+
+async function readInput(path) {
+  const maxBytes = 1024 * 1024;
+  const handle = await open(path, 'r');
+  try {
+    const buffer = Buffer.alloc(maxBytes + 1);
+    let total = 0;
+    while (total < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, total, buffer.length - total, total);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+    }
+    if (total > maxBytes) throw Object.assign(new Error('Input limit exceeded'), { code: 'INPUT_LIMIT' });
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, total));
+  } finally {
+    await handle.close();
+  }
 }
 
 function reportError(errors, json, stdout, stderr) {
